@@ -56,6 +56,14 @@ A bounded follow-up on branch `pad-init` uses `port/tools/recompile.py` to renam
 
 The next investigation must establish why no game frame is visible—separate a game thread stall, missing draw path, and menu/asset loading—before claiming progress. The `CD_DATA*.BIN` code candidates were not confirmed to load during these bounded attempts; their bases remain unknown. Do not substitute guessed code or claim a playable port.
 
+## Black-area diagnosis — 2026-10-21
+
+A bounded Xvfb run showed a game thread at roughly 94% CPU while the window/presentation thread was mostly waiting (`.local/probe/black-sample/threads.log`). **Throwaway probes inserted only into ignored generated C#** then localized the stall: boot returns from the repaired pad initializer and enters `func_80015A2C`; its initial CD queue request succeeds (`0x80032240`), it issues a `DsPacket` command, and its completion flag remains `0x12` over more than 67 million polls in six seconds (`.local/probe/black-probe.log`). The screenshot remained black with only RecompOne's own menu. These observations do not establish any rendered game content.
+
+Static code-flow explanation: `func_80015A2C` loops at original address `0x80015B08`, repeatedly calling `VSync(1)` and reading CD status without progressing while bit `0x10` remains set. RecompOne's `LibEtc.VSync` returns early for mode 1 without `Runtime.PresentFrame`; `Runtime.PresentFrame` is the only caller of `LibCd.Tick`, which runs `LibDs.Tick`/`Pump` to drain queued `DsPacket` jobs. `Interrupts.PollSlow` and the host's `PresentLoop` do not pump this queue. The combination strongly explains the perpetual in-progress CD status and black area: a CD operation cannot complete when game code only *queries* VSync. This is an inference from code plus the repeated status observation, **not** evidence that textures or the original disc data are wrong. The bounded probes did not patch the queue or verify any minigame.
+
+Next fix should advance CD jobs independently of a `VSync(0)`/present-frame call while retaining frame-timed delivery; verify the flag clears and boot moves beyond `func_80015A2C` before changing rendering or assets. Do not force the flag in game memory or treat the black screenshot alone as a GPU defect.
+
 ## Next gate before a playable-build plan
 
 Trace boot → menus → Burst the Balloon, identify which EXE runs that minigame and how the other executables and `CD_DATA*.BIN` are loaded. Resolve any embedded code load addresses and ambiguous SDK functions on the selected path with static or bounded runtime evidence; add only demonstrated compatibility patches. Then plan generated-code compilation and verification on Linux and Windows. If these code/data boundaries cannot be established, stop and reassess rather than inventing gameplay or claiming a port.
