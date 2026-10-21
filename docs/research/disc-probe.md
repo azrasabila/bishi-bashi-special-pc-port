@@ -64,6 +64,12 @@ Static code-flow explanation: `func_80015A2C` loops at original address `0x80015
 
 Next fix should advance CD jobs independently of a `VSync(0)`/present-frame call while retaining frame-timed delivery; verify the flag clears and boot moves beyond `func_80015A2C` before changing rendering or assets. Do not force the flag in game memory or treat the black screenshot alone as a GPU defect.
 
+### Bounded CD-pump attempt
+
+The `cd-pump` change attaches a game-only pre-hook to the existing `VSync` HLE entry at `0x80018F3C`. When called as `VSync(1)`, it pumps queued `LibDs` work no more than once per 20 ms, then lets the original query return its elapsed-time value. It does not alter the shared runtime, generated code, or disc contents. Regeneration reports **two** game-specific patches and the build and nine tests pass.
+
+A 13-second Xvfb run advanced past the former `func_80015A2C` stall (two `ResetGraph` lines) but then crashed in `func_800124F8` with **`unmapped address: 0x80800000`**. A captured screenshot shows a black game area with RecompOne's crash popup, **not gameplay** (`.local/probe/cd-visual/frame.png`, `boot.log`). Throwaway probes confined to ignored generated code measured a 0x5000-byte CD read followed by an inflate call from `0x801413BC` to `0x801463BC`; its source header was interpreted as a 0x625813-byte encoded length, and output reached the 8 MiB mapped-memory limit. The read's origin/content and decompressor expectations have not yet been verified. Logs are in `.local/probe/cd-visual/inflate.log` and `final-boot.log`; do **not** grow mapped RAM, ignore the invalid pointer, or claim the menu boots. Determine whether the source CD sector/offset, sector transfer, or compressed-data format is incorrect before editing the inflater.
+
 ## Next gate before a playable-build plan
 
 Trace boot → menus → Burst the Balloon, identify which EXE runs that minigame and how the other executables and `CD_DATA*.BIN` are loaded. Resolve any embedded code load addresses and ambiguous SDK functions on the selected path with static or bounded runtime evidence; add only demonstrated compatibility patches. Then plan generated-code compilation and verification on Linux and Windows. If these code/data boundaries cannot be established, stop and reassess rather than inventing gameplay or claiming a port.

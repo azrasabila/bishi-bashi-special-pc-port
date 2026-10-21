@@ -1,4 +1,4 @@
-"""Keep Bishi Bashi's pad initialization while hooking its host controller buffers."""
+"""Keep game pad initialization and service CD work during VSync polling."""
 import json
 import subprocess
 from pathlib import Path
@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = {'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
         'target': 'Recompiled.PadPatches.InitDirect'}
+CD_HOOK = {'overlay': 'main', 'address': '0x80018F3C', 'mode': 'pre',
+           'target': 'Recompiled.CdPatches.PumpWhenPolling'}
 
 
 def prepare(path: Path) -> None:
@@ -17,10 +19,14 @@ def prepare(path: Path) -> None:
     matches = [f for f in funcmap['functions'] if f['address'] == HOOK['address']]
     if len(matches) != 1 or matches[0]['name'] not in ('PadInitDirect', 'PadInitDirect_Game'):
         raise ValueError('unexpected PadInitDirect map at 0x800243CC')
+    vsync = [f for f in funcmap['functions'] if f['address'] == CD_HOOK['address']]
+    if len(vsync) != 1 or vsync[0]['name'] != 'VSync':
+        raise ValueError('unexpected VSync map at 0x80018F3C')
     matches[0]['name'] = 'PadInitDirect_Game'
     patches = config.setdefault('patches', [])
-    if HOOK not in patches:
-        patches.append(HOOK)
+    for hook in (HOOK, CD_HOOK):
+        if hook not in patches:
+            patches.append(hook)
     funcmap_path.write_text(json.dumps(funcmap, indent=2) + '\n')
     path.write_text(json.dumps(config, indent=2) + '\n')
 
