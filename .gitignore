@@ -1,4 +1,4 @@
-.local/
+.local
 .worktrees/
 *.bin
 *.BIN
@@ -10,3 +10,5 @@
 generated/
 assets/
 __pycache__/
+bin/
+obj/

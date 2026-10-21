@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>BishiBashi</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../.local/RecompOne/RecompOne.Runtime/RecompOne.Runtime.csproj" />
+    <Compile Include="../.local/probe/generated/*.cs" Link="Generated/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
