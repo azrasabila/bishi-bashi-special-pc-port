@@ -8,6 +8,20 @@ HOOK = {'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
         'target': 'Recompiled.PadPatches.InitDirect'}
 CD_HOOK = {'overlay': 'main', 'address': '0x80018F3C', 'mode': 'pre',
            'target': 'Recompiled.CdPatches.PumpWhenPolling'}
+RUNTIME_REVISION = '4259b76fa923d1e607a6b3379ef908cb5d5b9354'
+
+
+def apply_runtime_patch(repo: Path) -> None:
+    revision = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+    if revision != RUNTIME_REVISION:
+        raise ValueError(f'expected RecompOne {RUNTIME_REVISION}, got {revision}')
+    patch = ROOT / 'port/patches/runtime-cd.patch'
+    command = ['git', '-C', str(repo), 'apply']
+    if subprocess.run(command + ['--reverse', '--check', str(patch)],
+                      capture_output=True).returncode == 0:
+        return
+    subprocess.run(command + ['--check', str(patch)], check=True)
+    subprocess.run(command + [str(patch)], check=True)
 
 
 def prepare(path: Path) -> None:
@@ -34,6 +48,7 @@ def prepare(path: Path) -> None:
 if __name__ == '__main__':
     # ponytail: requires local disc-probe maps; autogenerate them for clean-checkout builds.
     config_path = ROOT / '.local/probe/config/BishiBashi.json'
+    apply_runtime_patch(ROOT / '.local/RecompOne')
     prepare(config_path)
     subprocess.run([str(ROOT / '.local/dotnet/dotnet'), 'run', '--project',
                     str(ROOT / '.local/RecompOne/RecompOne.Recompiler'), '-c', 'Release',

@@ -10,4 +10,4 @@ python3 port/tools/recompile.py
 port/run-linux.sh 'Bishi Bashi Special.cue'
 ```
 
-The recompile step preserves the disc's original pad initializer and attaches the host controller-buffer hook. The launcher exposes the bundled Linux native libraries without installing them system-wide. **This is not playable:** the bounded Xvfb test shows only a black game area; no minigame has been verified. A clean checkout still needs the disc-probe maps generated first.
+The recompile step preserves the disc's original pad initializer, attaches the controller and CD-poll hooks, and idempotently applies `port/patches/runtime-cd.patch` to the **pinned** local RecompOne checkout before building. Do not skip it when rebuilding from a clean RecompOne clone. The launcher exposes bundled Linux native libraries without installing them system-wide. **This is not yet verified playable:** a bounded Xvfb run reached the game's "Select Games" screen; input and minigames have not been verified. A clean checkout still needs the disc-probe maps generated first.

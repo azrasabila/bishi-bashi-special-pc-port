@@ -1,0 +1,29 @@
+diff --git a/RecompOne.Runtime/sdk/LibCd.cs b/RecompOne.Runtime/sdk/LibCd.cs
+index 076f527..3691e05 100644
+--- a/RecompOne.Runtime/sdk/LibCd.cs
++++ b/RecompOne.Runtime/sdk/LibCd.cs
+@@ -887,12 +887,12 @@ public static class LibCd
+     {
+         var madr = c.A0;
+         var words = (int)c.A1;
+-        var lba = LibDs.Active && LibDs.SectorLba >= 0 ? LibDs.SectorLba
+-            : _int1Lba >= 0 ? _int1Lba : CurrentLba;
++        var dsSector = LibDs.Active && LibDs.SectorLba >= 0;
++        var lba = dsSector ? LibDs.SectorLba : _int1Lba >= 0 ? _int1Lba : CurrentLba;
+         byte[] data;
+         lock (DiscLock)
+         {
+-            data = Runtime.Cd!.ReadSectorData(lba, SectorSize(_mode));
++            data = Runtime.Cd!.ReadSectorData(lba, dsSector ? 2048 : SectorSize(_mode));
+         }
+ 
+         if (lba != _fifoLba) FifoReload(lba);
+@@ -904,7 +904,7 @@ public static class LibCd
+         _fifoOff += bytes;
+ 
+         _cdDataPending = true;
+-        if (!_inDataCb && _readActive && _cbReady == 0 && _cbData == 0)
++        if (!dsSector && !_inDataCb && _readActive && _cbReady == 0 && _cbData == 0)
+         {
+             AdvancePos(1);
+             Dispatcher.LoadByLba(CurrentLba);
