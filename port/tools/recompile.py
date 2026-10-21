@@ -36,6 +36,18 @@ def prepare(path: Path) -> None:
     vsync = [f for f in funcmap['functions'] if f['address'] == CD_HOOK['address']]
     if len(vsync) != 1 or vsync[0]['name'] != 'VSync':
         raise ValueError('unexpected VSync map at 0x80018F3C')
+    functions = funcmap['functions']
+    boot = [f for f in functions if f['address'] == '0x80010D48']
+    callback = [f for f in functions if f['address'] == '0x80011054']
+    if (len(boot) != 1 or boot[0]['name'] != 'func_80010D48' or
+        not ((boot[0]['size'] == 856 and not callback) or
+             (boot[0]['size'] == 780 and len(callback) == 1 and
+              callback[0]['name'] == 'func_80011054' and callback[0]['size'] == 76))):
+        raise ValueError('unexpected VBlank input callback map at 0x80011054')
+    if boot[0]['size'] == 856:
+        boot[0]['size'] = 780
+        functions.insert(functions.index(boot[0]) + 1,
+                         {'address': '0x80011054', 'name': 'func_80011054', 'size': 76})
     matches[0]['name'] = 'PadInitDirect_Game'
     patches = config.setdefault('patches', [])
     for hook in (HOOK, CD_HOOK):
