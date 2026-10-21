@@ -1,0 +1,11 @@
+.local/
+*.bin
+*.BIN
+*.cue
+*.CUE
+*.7z
+*.exe
+*.EXE
+generated/
+assets/
+__pycache__/
