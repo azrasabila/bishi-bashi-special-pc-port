@@ -6,7 +6,7 @@ from port.tools.recompile import prepare
 
 
 class RecompileTest(unittest.TestCase):
-    def test_preserves_pad_initializer_and_splits_input_callback(self):
+    def test_preserves_pad_initializer_and_splits_callbacks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / 'funcmaps').mkdir()
@@ -15,9 +15,16 @@ class RecompileTest(unittest.TestCase):
                 {'address': '0x800243CC', 'name': 'PadInitDirect', 'size': 176},
                 {'address': '0x80018F3C', 'name': 'VSync', 'size': 376},
                 {'address': '0x80010D48', 'name': 'func_80010D48', 'size': 856}]}))
+            (root / 'funcmaps/bishi1.json').write_text(json.dumps({'functions': [
+                {'address': '0x80014CDC', 'name': 'func_80014CDC', 'size': 2048}]}))
+            (root / 'funcmaps/bishi2.json').write_text(json.dumps({'functions': [
+                {'address': '0x80012FC0', 'name': 'func_80012FC0', 'size': 2136}]}))
             config = root / 'BishiBashi.json'
             config.write_text(json.dumps({'game': {'id': 'SLES-02537'},
-                                          'funcMap': 'funcmaps/main.json', 'patches': []}))
+                                          'funcMap': 'funcmaps/main.json', 'patches': [],
+                                          'overlays': [
+                                              {'name': 'bishi1', 'funcMap': 'funcmaps/bishi1.json'},
+                                              {'name': 'bishi2', 'funcMap': 'funcmaps/bishi2.json'}]}))
             prepare(config)
             prepare(config)
             mapped = json.loads(funcmap.read_text())['functions'][0]
@@ -26,6 +33,11 @@ class RecompileTest(unittest.TestCase):
             self.assertEqual([(f['address'], f['size']) for f in functions if f['address'] in
                               ('0x80010D48', '0x80011054')],
                              [('0x80010D48', 780), ('0x80011054', 76)])
+            for name, start, callback in [('bishi1', '0x80014CDC', '0x80015414'),
+                                          ('bishi2', '0x80012FC0', '0x80013750')]:
+                functions = json.loads((root / f'funcmaps/{name}.json').read_text())['functions']
+                self.assertEqual([(f['address'], f['size']) for f in functions],
+                                 [(start, 1848 if name == 'bishi1' else 1936), (callback, 200)])
             self.assertEqual(json.loads(config.read_text())['patches'], [{
                 'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
                 'target': 'Recompiled.PadPatches.InitDirect'}, {

@@ -44,10 +44,36 @@ def prepare(path: Path) -> None:
              (boot[0]['size'] == 780 and len(callback) == 1 and
               callback[0]['name'] == 'func_80011054' and callback[0]['size'] == 76))):
         raise ValueError('unexpected VBlank input callback map at 0x80011054')
+    overlays = []
+    for name, start, old_size, target, new_size in (
+        ('bishi1', '0x80014CDC', 2048, '0x80015414', 1848),
+        ('bishi2', '0x80012FC0', 2136, '0x80013750', 1936),
+    ):
+        entries = [o for o in config.get('overlays', []) if o['name'] == name]
+        if len(entries) != 1:
+            raise ValueError(f'missing {name} overlay')
+        overlay_path = path.parent / entries[0]['funcMap']
+        overlay = json.loads(overlay_path.read_text())
+        mapped = overlay['functions']
+        original = [f for f in mapped if f['address'] == start]
+        cb = [f for f in mapped if f['address'] == target]
+        if (len(original) != 1 or original[0]['name'] != f'func_{start[2:]}' or
+            not ((original[0]['size'] == old_size and not cb) or
+                 (original[0]['size'] == new_size and len(cb) == 1 and
+                  cb[0]['name'] == f'func_{target[2:]}' and cb[0]['size'] == 200))):
+            raise ValueError(f'unexpected {name} IRQ callback map at {target}')
+        overlays.append((overlay_path, overlay, original[0], target, new_size))
     if boot[0]['size'] == 856:
         boot[0]['size'] = 780
         functions.insert(functions.index(boot[0]) + 1,
                          {'address': '0x80011054', 'name': 'func_80011054', 'size': 76})
+    for overlay_path, overlay, original, target, new_size in overlays:
+        if original['size'] != new_size:
+            original['size'] = new_size
+            entries = overlay['functions']
+            entries.insert(entries.index(original) + 1,
+                           {'address': target, 'name': f'func_{target[2:]}', 'size': 200})
+        overlay_path.write_text(json.dumps(overlay, indent=2) + '\n')
     matches[0]['name'] = 'PadInitDirect_Game'
     patches = config.setdefault('patches', [])
     for hook in (HOOK, CD_HOOK):
