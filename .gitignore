@@ -12,3 +12,4 @@ assets/
 __pycache__/
 bin/
 obj/
+card?.sav

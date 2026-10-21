@@ -35,6 +35,19 @@ RecompOne produced `.local/probe/config/BishiBashi.json` and three `funcmaps/*.j
 
 A subsequent `dotnet run --project .local/RecompOne/RecompOne.Recompiler -c Release --no-build -- .local/probe/config/BishiBashi.json` succeeded and wrote generated `Entry.cs`, `main.cs`, `bishi1.cs`, `bishi2.cs`, and `Stubs.cs` under ignored `.local/probe/generated/` (2,399 tentative functions, 147 SDK reimplementations). This establishes **translation only**: the generated code has not been compiled into a host program or executed. Text in the boot executable includes `Bishi Bashi Special` next to `\\BISHI1.EXE;1`, `Bishi Bashi Special2` next to `\\BISHI2.EXE;1`, and the other EXEs refer to `\\CD_DATA1.BIN;1` / `\\CD_DATA2.BIN;1` respectively. Those strings suggest routes, but do not establish control flow, game location, or load addresses.
 
+## Bounded Linux boot attempt — 2026-10-21
+
+A minimal host in `port/` compiled the generated C# with RecompOne's runtime and accepted an explicit user-owned CUE. Build: `DOTNET_ROOT="$PWD/.local/dotnet" PATH="$PWD/.local/dotnet:$PATH" dotnet build port/BishiBashi.csproj -c Release --nologo` (zero errors; warnings in RecompOne and generated code). The host's three invalid-input scenarios return exit code 2 without initializing the runtime; five Python tests pass. Only Linux compilation has been exercised; there is no Windows build verification.
+
+From the isolated worktree, `timeout 15s xvfb-run -a .local/dotnet/dotnet port/bin/Release/net10.0/BishiBashi.dll "$PWD/Bishi Bashi Special.cue"` exited **134**, not 124: the process aborted with an exception before the timeout. Retained log: ignored `.local/probe/boot.log`. No screenshot/window capture was taken; **no menu, minigame, graphics, or audio is verified**. The runtime wrote two new 131,072-byte `card?.sav` memory-card files into the worktree; these are ignored to prevent accidental staging.
+
+Observed log order:
+
+1. Silk.NET reported no suitable GLFW window platform for GL 4.5, 3.3, or 2.1, then `no usable gl context were found`. The runtime continued; this alone did not terminate the process.
+2. Runtime reported loading the `main` overlay, then threw `InvalidOperationException: unmapped call: 0x00000000`. Generated `main.cs` at line 25183 (`func_8002429C`, caller chain `func_800137C8` → `func_800110D8` → `func_80010D48` → boot `func_80016030`) loads a call target from memory address `0x8003186C` and calls the value, which was zero. The immediately preceding generated call is to `0x8001E9BC`. This is an observed null indirect call, **not proof** whether the cause is a bad function map, uninitialized data, incorrect SDK routing, or missing hardware behavior.
+
+Next investigate the Linux window-platform native library/setup *and* trace which original initializer should populate `0x8003186C`, checking the mapped function at `0x8001E9BC` and its preceding calls before changing code. The `CD_DATA*.BIN` code candidates were not reached in this bounded attempt; their bases remain unknown. Do not substitute a guessed callback or claim a playable port.
+
 ## Next gate before a playable-build plan
 
 Trace boot → menus → Burst the Balloon, identify which EXE runs that minigame and how the other executables and `CD_DATA*.BIN` are loaded. Resolve any embedded code load addresses and ambiguous SDK functions on the selected path with static or bounded runtime evidence; add only demonstrated compatibility patches. Then plan generated-code compilation and verification on Linux and Windows. If these code/data boundaries cannot be established, stop and reassess rather than inventing gameplay or claiming a port.
