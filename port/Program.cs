@@ -1,4 +1,5 @@
 using Recompiled;
+using RecompOne.Runtime.Config;
 using RecompOne.Runtime.Memory;
 
 if (args.Length != 1 || !File.Exists(args[0]) ||
@@ -8,5 +9,21 @@ if (args.Length != 1 || !File.Exists(args[0]) ||
     return 2;
 }
 
-Entry.Run(new PSMemory(), Path.GetFullPath(args[0]));
-return 0;
+var disc = Path.GetFullPath(args[0]);
+Settings.System.DiscPath = disc;
+Settings.MarkDirty();
+Settings.Save();
+var failed = false;
+try
+{
+    RecompOne.Runtime.Runtime.Run(() =>
+    {
+        try { Entry.Run(new PSMemory(), disc); }
+        catch { failed = true; throw; }
+    });
+}
+finally
+{
+    RecompOne.Runtime.Runtime.Shutdown();
+}
+return failed ? 3 : 0;
