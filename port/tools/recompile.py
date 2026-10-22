@@ -17,6 +17,10 @@ RAW_CODE = {'name': 'cd_data1_code', 'file': 'CD_DATA1.BIN', 'offset': 1046528,
 PINS_CODE = {'name': 'cd_data1_pins', 'file': 'CD_DATA1.BIN', 'offset': 1435648,
              'size': 20480, 'base': '0x800C0000', 'functions': [
                  {'address': '800C0540'}, {'address': '800C4530'}]}
+# The Roach stage loads its own code into the same RAM region from LBA 1447.
+ROACH_CODE = {'name': 'cd_data1_roach', 'file': 'CD_DATA1.BIN', 'offset': 2576384,
+              'size': 14336, 'base': '0x800C0000', 'functions': [
+                  {'address': '800C0CC0'}]}
 
 
 def apply_runtime_patch(repo: Path) -> None:
@@ -71,7 +75,7 @@ def prepare(path: Path) -> None:
                   cb[0]['name'] == f'func_{target[2:]}' and cb[0]['size'] == 200))):
             raise ValueError(f'unexpected {name} IRQ callback map at {target}')
         overlays.append((overlay_path, overlay, original[0], target, new_size))
-    for code in (RAW_CODE, PINS_CODE):
+    for code in (RAW_CODE, PINS_CODE, ROACH_CODE):
         found = [o for o in config['overlays'] if o['name'] == code['name']]
         if found and found != [code]:
             raise ValueError(f"unexpected CD_DATA1.BIN code overlay: {code['name']}")
