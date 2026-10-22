@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../.local/RecompOne/RecompOne.Runtime/RecompOne.Runtime.csproj" />
+    <ProjectReference Include="../port/BishiBashi.csproj" />
   </ItemGroup>
 </Project>

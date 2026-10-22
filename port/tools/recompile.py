@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from port.tools.code_banks import Bank, load_catalog
+from port.tools.verify_banks import verify_generated
 
 HOOK = {'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
         'target': 'Recompiled.PadPatches.InitDirect'}
@@ -137,7 +138,10 @@ if __name__ == '__main__':
     banks = load_catalog(ROOT / 'Bishi Bashi Special.bin', ROOT / '.local/probe/disc.json')
     apply_runtime_patch(ROOT / '.local/RecompOne')
     prepare(config_path, banks)
-    clear_generated((config_path.parent / json.loads(config_path.read_text())['game']['output']).resolve())
+    generated_dir = (config_path.parent / json.loads(config_path.read_text())['game']['output']).resolve()
+    clear_generated(generated_dir)
     subprocess.run([str(ROOT / '.local/dotnet/dotnet'), 'run', '--project',
                     str(ROOT / '.local/RecompOne/RecompOne.Recompiler'), '-c', 'Release',
                     '--', str(config_path)], check=True, cwd=ROOT)
+    rows = verify_generated(banks, generated_dir)
+    (ROOT / '.local/probe/bank-audit.json').write_text(json.dumps(rows, indent=2) + '\n')
