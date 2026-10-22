@@ -38,11 +38,22 @@ class RecompileTest(unittest.TestCase):
                 functions = json.loads((root / f'funcmaps/{name}.json').read_text())['functions']
                 self.assertEqual([(f['address'], f['size']) for f in functions],
                                  [(start, 1848 if name == 'bishi1' else 1936), (callback, 200)])
+            raw = [o for o in json.loads(config.read_text())['overlays']
+                   if o['name'] == 'cd_data1_code']
+            self.assertEqual(raw, [{
+                'name': 'cd_data1_code', 'file': 'CD_DATA1.BIN', 'offset': 1046528,
+                'size': 12288, 'base': '0x800C0000', 'functions': [
+                    {'address': '800C00B4'}, {'address': '800C0A44'}, {'address': '800C0FB0'}]}])
             self.assertEqual(json.loads(config.read_text())['patches'], [{
                 'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
                 'target': 'Recompiled.PadPatches.InitDirect'}, {
                 'overlay': 'main', 'address': '0x80018F3C', 'mode': 'pre',
                 'target': 'Recompiled.CdPatches.PumpWhenPolling'}])
+            broken = json.loads(config.read_text())
+            broken['overlays'][-1]['size'] = 2048
+            config.write_text(json.dumps(broken))
+            with self.assertRaisesRegex(ValueError, 'CD_DATA1.BIN'):
+                prepare(config)
 
     def test_rejects_unexpected_disc_or_function_map(self):
         with tempfile.TemporaryDirectory() as tmp:

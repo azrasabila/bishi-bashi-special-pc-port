@@ -9,6 +9,10 @@ HOOK = {'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
 CD_HOOK = {'overlay': 'main', 'address': '0x80018F3C', 'mode': 'pre',
            'target': 'Recompiled.CdPatches.PumpWhenPolling'}
 RUNTIME_REVISION = '4259b76fa923d1e607a6b3379ef908cb5d5b9354'
+# At the crash, RAM 0x800C0000..0x800C3FFF matched CD_DATA1.BIN sectors 700..707.
+RAW_CODE = {'name': 'cd_data1_code', 'file': 'CD_DATA1.BIN', 'offset': 1046528,
+            'size': 12288, 'base': '0x800C0000', 'functions': [
+                {'address': '800C00B4'}, {'address': '800C0A44'}, {'address': '800C0FB0'}]}
 
 
 def apply_runtime_patch(repo: Path) -> None:
@@ -63,6 +67,11 @@ def prepare(path: Path) -> None:
                   cb[0]['name'] == f'func_{target[2:]}' and cb[0]['size'] == 200))):
             raise ValueError(f'unexpected {name} IRQ callback map at {target}')
         overlays.append((overlay_path, overlay, original[0], target, new_size))
+    raw = [o for o in config['overlays'] if o['name'] == RAW_CODE['name']]
+    if raw and raw != [RAW_CODE]:
+        raise ValueError('unexpected CD_DATA1.BIN code overlay')
+    if not raw:
+        config['overlays'].append(RAW_CODE)
     if boot[0]['size'] == 856:
         boot[0]['size'] = 780
         functions.insert(functions.index(boot[0]) + 1,
