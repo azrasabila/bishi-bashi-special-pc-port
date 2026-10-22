@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from port.tools.code_banks import Bank, load_catalog
 from port.tools.verify_banks import verify_generated
+from tools.disc_preflight import cue_text
 
 HOOK = {'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
         'target': 'Recompiled.PadPatches.InitDirect'}
@@ -40,6 +41,19 @@ def apply_runtime_patch(repo: Path) -> None:
             continue
         subprocess.run(command + ['--check', str(patch)], check=True)
         subprocess.run(command + [str(patch)], check=True)
+
+
+def validate_source_cue(config_path: Path, image: Path) -> None:
+    cue_value = json.loads(config_path.read_text()).get('cue')
+    if not isinstance(cue_value, str) or not cue_value:
+        raise ValueError('missing CUE for validated disc image')
+    try:
+        resolved_image = image.resolve(strict=True)
+        cue = Path(cue_value).resolve(strict=True)
+        if cue != resolved_image.with_suffix('.cue') or cue.read_text() != cue_text(resolved_image.name):
+            raise ValueError('configured CUE does not reference validated BIN')
+    except OSError as exc:
+        raise ValueError(f'cannot read configured CUE: {exc}') from exc
 
 
 def prepare(path: Path, banks: list[Bank]) -> None:
@@ -91,6 +105,9 @@ def prepare(path: Path, banks: list[Bank]) -> None:
         found = [o for o in config['overlays'] if o['name'] == code['name']]
         if found and found != [code]:
             raise ValueError(f"unexpected legacy CD_DATA1.BIN overlay: {code['name']}")
+    empty_map = path.parent / 'funcmaps/code-bank-empty.json'
+    if empty_map.exists() and json.loads(empty_map.read_text()) != {'functions': []}:
+        raise ValueError('unexpected code-bank-empty function map')
     config['overlays'] = [o for o in config['overlays']
                           if o['name'] not in {code['name'] for code in LEGACY_BANKS}]
     for bank in banks:
@@ -98,14 +115,27 @@ def prepare(path: Path, banks: list[Bank]) -> None:
         if bank.name == 'super_bank_shared':
             seeds = [{'address': f'{entry:08X}'} for entry in
                      (0x800C00B4, 0x800C0A44, 0x800C0FB0)]
+        if bank.name == 'hyper_bank_shared':
+            seeds = [{'address': '8009859C'}, {'address': '80098810'}]
         if bank.name == 'super_bank_01':
             seeds.append({'address': '800C4530'})
         overlay = {'name': bank.name, 'lba': bank.lba, 'size': bank.size,
-                   'base': f'0x{bank.base:08X}', 'functions': seeds}
+                   'base': f'0x{bank.base:08X}', 'functions': seeds,
+                   'funcMap': 'funcmaps/code-bank-empty.json',
+                   'linearSweep': False, 'pointerScan': False}
         found = [o for o in config['overlays'] if o['name'] == bank.name]
-        if found and found != [overlay]:
-            raise ValueError(f'{bank.game} slot {bank.slot}: unexpected existing overlay')
-        if not found:
+        previous = {key: value for key, value in overlay.items()
+                    if key not in ('funcMap', 'linearSweep', 'pointerScan')}
+        allowed = [overlay, previous]
+        if bank.name == 'hyper_bank_shared':
+            allowed += [{**row, 'functions': old} for row in allowed
+                        for old in ([], [{'address': '80098810'}])]
+        if found:
+            if len(found) != 1 or found[0] not in allowed:
+                raise ValueError(f'{bank.game} slot {bank.slot}: unexpected existing overlay')
+            found[0].clear()
+            found[0].update(overlay)
+        else:
             config['overlays'].append(overlay)
     if boot[0]['size'] == 856:
         boot[0]['size'] = 780
@@ -118,6 +148,7 @@ def prepare(path: Path, banks: list[Bank]) -> None:
             entries.insert(entries.index(original) + 1,
                            {'address': target, 'name': f'func_{target[2:]}', 'size': 200})
         overlay_path.write_text(json.dumps(overlay, indent=2) + '\n')
+    empty_map.write_text('{"functions": []}\n')
     matches[0]['name'] = 'PadInitDirect_Game'
     patches = config.setdefault('patches', [])
     for hook in (HOOK, CD_HOOK):
@@ -135,7 +166,9 @@ def clear_generated(directory: Path) -> None:
 if __name__ == '__main__':
     # ponytail: requires local disc-probe maps; autogenerate them for clean-checkout builds.
     config_path = ROOT / '.local/probe/config/BishiBashi.json'
-    banks = load_catalog(ROOT / 'Bishi Bashi Special.bin', ROOT / '.local/probe/disc.json')
+    image = ROOT / 'Bishi Bashi Special.bin'
+    banks = load_catalog(image, ROOT / '.local/probe/disc.json')
+    validate_source_cue(config_path, image)
     apply_runtime_patch(ROOT / '.local/RecompOne')
     prepare(config_path, banks)
     generated_dir = (config_path.parent / json.loads(config_path.read_text())['game']['output']).resolve()

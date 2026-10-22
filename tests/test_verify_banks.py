@@ -47,6 +47,24 @@ class VerifyBanksTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'super slot 5'):
                 verify_generated(banks, output)
 
+    def test_rejects_unsupported_opcode_or_null_call_in_generated_bank(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            bank = Bank('super', 4, 0x800C13F0, 0x408, 1221, 0x4800, 0x800C0000)
+            (output / 'Entry.cs').write_text(
+                'Dispatcher.Register("super_bank_04", new Super_bank_04DispatchTable());')
+            source = ('public string Name => "super_bank_04";\n'
+                      'public int LbaStart => 1221;\n'
+                      'public uint Base => 0x800C0000u;\n'
+                      'public uint Size => 0x4800u;\n'
+                      '[0x800C13F0u] = callback,\n')
+            file = output / 'super_bank_04.cs'
+            for malformed in ('/* UNKOWN OP op=0x30 */', 'Dispatcher.Call(c, m, 0u);'):
+                with self.subTest(malformed=malformed):
+                    file.write_text(source + f'public static void bogus() {{ {malformed} }}')
+                    with self.assertRaisesRegex(ValueError, 'super slot 4'):
+                        verify_generated([bank], output)
+
     def test_shared_bank_has_no_game_slot_entry(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)
@@ -56,11 +74,17 @@ class VerifyBanksTest(unittest.TestCase):
                 'public string Name => "hyper_bank_shared";\n'
                 'public int LbaStart => 5613;\n'
                 'public uint Base => 0x80098000u;\n'
-                'public uint Size => 0x4000u;\n')
-            rows = verify_generated([Bank('hyper', -1, None, 671, 5613,
-                                          0x4000, 0x80098000)], output)
+                'public uint Size => 0x4000u;\n'
+                '[0x80098810u] = shared_callback,\n'
+                '[0x8009859Cu] = init_callback,\n')
+            bank = Bank('hyper', -1, None, 671, 5613, 0x4000, 0x80098000)
+            rows = verify_generated([bank], output)
             self.assertEqual((rows[0]['entry'], rows[0]['activationTest']),
                              (None, 'not-applicable'))
+            file = output / 'hyper_bank_shared.cs'
+            file.write_text(file.read_text().replace('[0x8009859Cu]', '[0x800985A0u]'))
+            with self.assertRaisesRegex(ValueError, 'hyper slot -1'):
+                verify_generated([bank], output)
 
 
 if __name__ == '__main__':

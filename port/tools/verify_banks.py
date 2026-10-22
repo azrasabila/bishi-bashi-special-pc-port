@@ -32,8 +32,13 @@ def verify_generated(banks: list[Bank], generated_dir: Path) -> list[dict]:
                     f'public uint Size => 0x{bank.size:X}u;']
         if bank.entry is not None:
             required.append(f'[0x{bank.entry:08X}u] =')
+        if bank.name == 'hyper_bank_shared':
+            required.extend(('[0x8009859Cu] =', '[0x80098810u] ='))
         if not all(line in source for line in required):
             raise ValueError(f'{label}: missing or incorrect dispatcher mapping')
+        suspect = re.search(r'/\* UNKOWN OP|Dispatcher\.Call\(c, m, 0u\);', source)
+        if suspect:
+            raise ValueError(f'{label}: unresolved code/data boundary: {suspect.group()}')
         pointer = None if bank.entry is None else f'0x{bank.entry:08X}'
         rows.append({'game': bank.game, 'slot': bank.slot, 'name': bank.name,
                      'pointer': pointer, 'entry': pointer,

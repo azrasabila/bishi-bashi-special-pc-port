@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from port.tools.code_banks import Bank
-from port.tools.recompile import clear_generated, prepare
+from port.tools.recompile import clear_generated, prepare, validate_source_cue
 
 LEGACY = [
     {'name': 'cd_data1_code', 'file': 'CD_DATA1.BIN', 'offset': 1046528,
@@ -76,6 +76,22 @@ class RecompileTest(unittest.TestCase):
             once = config.read_text()
             prepare(config, BANKS)
             self.assertEqual(config.read_text(), once)
+            previous = json.loads(once)
+            for row in previous['overlays']:
+                if row['name'].startswith(('super_bank_', 'hyper_bank_')):
+                    for key in ('funcMap', 'linearSweep', 'pointerScan'):
+                        row.pop(key)
+                    if row['name'] == 'hyper_bank_shared':
+                        row['functions'] = []
+            config.write_text(json.dumps(previous))
+            prepare(config, BANKS)
+            self.assertEqual(config.read_text(), once)
+            previous = json.loads(once)
+            next(o for o in previous['overlays']
+                 if o['name'] == 'hyper_bank_shared')['functions'] = [{'address': '80098810'}]
+            config.write_text(json.dumps(previous))
+            prepare(config, BANKS)
+            self.assertEqual(config.read_text(), once)
             self.assertEqual(json.loads(funcmap.read_text())['functions'][0]['name'],
                              'PadInitDirect_Game')
             functions = json.loads(funcmap.read_text())['functions']
@@ -95,17 +111,31 @@ class RecompileTest(unittest.TestCase):
                  'target': 'Recompiled.CdPatches.PumpWhenPolling'}])
             rows = [o for o in config_obj['overlays'] if o['name'].startswith(('super_bank_', 'hyper_bank_'))]
             self.assertEqual((len(rows), len({o['name'] for o in rows})), (96, 96))
+            self.assertEqual({(o.get('linearSweep'), o.get('pointerScan'), o.get('funcMap'))
+                              for o in rows}, {(False, False, 'funcmaps/code-bank-empty.json')})
+            self.assertEqual(json.loads((root / 'funcmaps/code-bank-empty.json').read_text()),
+                             {'functions': []})
             self.assertFalse({row['name'] for row in config_obj['overlays']} &
                              {row['name'] for row in LEGACY})
             self.assertEqual(next(o for o in rows if o['name'] == 'super_bank_04')['lba'], 1221)
             self.assertEqual(next(o for o in rows if o['name'] == 'hyper_bank_06'), {
                 'name': 'hyper_bank_06', 'lba': 6265, 'size': 0x5000,
-                'base': '0x80098000', 'functions': [{'address': '80098810'}]})
+                'base': '0x80098000', 'functions': [{'address': '80098810'}],
+                'funcMap': 'funcmaps/code-bank-empty.json',
+                'linearSweep': False, 'pointerScan': False})
             self.assertEqual(next(o for o in rows if o['name'] == 'super_bank_shared')['functions'],
                              [{'address': '800C00B4'}, {'address': '800C0A44'},
                               {'address': '800C0FB0'}])
+            self.assertEqual(next(o for o in rows if o['name'] == 'hyper_bank_shared')['functions'],
+                             [{'address': '8009859C'}, {'address': '80098810'}])
             self.assertEqual(next(o for o in rows if o['name'] == 'super_bank_01')['functions'],
                              [{'address': '800C0540'}, {'address': '800C4530'}])
+            empty_map = root / 'funcmaps/code-bank-empty.json'
+            empty_map.write_text(json.dumps({'functions': [{'address': '0x800C0000'}]}))
+            with self.assertRaisesRegex(ValueError, 'code-bank-empty'):
+                prepare(config, BANKS)
+            self.assertEqual(config.read_text(), once)
+            empty_map.write_text(json.dumps({'functions': []}))
             broken = json.loads(once)
             next(o for o in broken['overlays'] if o['name'] == 'super_bank_04')['lba'] = 999
             config.write_text(json.dumps(broken))
@@ -150,6 +180,31 @@ class RecompileTest(unittest.TestCase):
                                           'funcMap': 'funcmaps/main.json'}))
             with self.assertRaises(ValueError):
                 prepare(config, BANKS)
+
+    def test_rejects_configured_cue_not_bound_to_validated_bin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image = root / 'disc.bin'
+            image.write_bytes(b'fixture image')
+            cue = root / 'disc.cue'
+            cue.write_text('FILE "disc.bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n')
+            other = root / 'other.cue'
+            other.write_text('FILE "other.bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n')
+            config = root / 'config.json'
+            config.write_text(json.dumps({'cue': str(other)}))
+            with self.assertRaisesRegex(ValueError, 'CUE'):
+                validate_source_cue(config, image)
+            cue.write_text(other.read_text())
+            config.write_text(json.dumps({'cue': str(cue)}))
+            with self.assertRaisesRegex(ValueError, 'CUE'):
+                validate_source_cue(config, image)
+            cue.write_text('FILE "disc.bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n')
+            image_alias = root / 'disc-alias.bin'
+            image_alias.symlink_to(image)
+            cue_alias = root / 'cue-alias.cue'
+            cue_alias.symlink_to(cue)
+            config.write_text(json.dumps({'cue': str(cue_alias)}))
+            validate_source_cue(config, image_alias)
 
     def test_old_generated_translations_do_not_enter_new_build(self):
         with tempfile.TemporaryDirectory() as tmp:
