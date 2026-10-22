@@ -13,6 +13,10 @@ RUNTIME_REVISION = '4259b76fa923d1e607a6b3379ef908cb5d5b9354'
 RAW_CODE = {'name': 'cd_data1_code', 'file': 'CD_DATA1.BIN', 'offset': 1046528,
             'size': 12288, 'base': '0x800C0000', 'functions': [
                 {'address': '800C00B4'}, {'address': '800C0A44'}, {'address': '800C0FB0'}]}
+# The Pins overwrites that RAM region with code from CD_DATA1.BIN starting at LBA 890.
+PINS_CODE = {'name': 'cd_data1_pins', 'file': 'CD_DATA1.BIN', 'offset': 1435648,
+             'size': 20480, 'base': '0x800C0000', 'functions': [
+                 {'address': '800C0540'}, {'address': '800C4530'}]}
 
 
 def apply_runtime_patch(repo: Path) -> None:
@@ -67,11 +71,12 @@ def prepare(path: Path) -> None:
                   cb[0]['name'] == f'func_{target[2:]}' and cb[0]['size'] == 200))):
             raise ValueError(f'unexpected {name} IRQ callback map at {target}')
         overlays.append((overlay_path, overlay, original[0], target, new_size))
-    raw = [o for o in config['overlays'] if o['name'] == RAW_CODE['name']]
-    if raw and raw != [RAW_CODE]:
-        raise ValueError('unexpected CD_DATA1.BIN code overlay')
-    if not raw:
-        config['overlays'].append(RAW_CODE)
+    for code in (RAW_CODE, PINS_CODE):
+        found = [o for o in config['overlays'] if o['name'] == code['name']]
+        if found and found != [code]:
+            raise ValueError(f"unexpected CD_DATA1.BIN code overlay: {code['name']}")
+        if not found:
+            config['overlays'].append(code)
     if boot[0]['size'] == 856:
         boot[0]['size'] = 780
         functions.insert(functions.index(boot[0]) + 1,

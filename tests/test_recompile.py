@@ -44,13 +44,24 @@ class RecompileTest(unittest.TestCase):
                 'name': 'cd_data1_code', 'file': 'CD_DATA1.BIN', 'offset': 1046528,
                 'size': 12288, 'base': '0x800C0000', 'functions': [
                     {'address': '800C00B4'}, {'address': '800C0A44'}, {'address': '800C0FB0'}]}])
+            pins = [o for o in json.loads(config.read_text())['overlays']
+                    if o['name'] == 'cd_data1_pins']
+            self.assertEqual(pins, [{
+                'name': 'cd_data1_pins', 'file': 'CD_DATA1.BIN', 'offset': 1435648,
+                'size': 20480, 'base': '0x800C0000', 'functions': [
+                    {'address': '800C0540'}, {'address': '800C4530'}]}])
             self.assertEqual(json.loads(config.read_text())['patches'], [{
                 'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
                 'target': 'Recompiled.PadPatches.InitDirect'}, {
                 'overlay': 'main', 'address': '0x80018F3C', 'mode': 'pre',
                 'target': 'Recompiled.CdPatches.PumpWhenPolling'}])
             broken = json.loads(config.read_text())
-            broken['overlays'][-1]['size'] = 2048
+            next(o for o in broken['overlays'] if o['name'] == 'cd_data1_code')['size'] = 2048
+            config.write_text(json.dumps(broken))
+            with self.assertRaisesRegex(ValueError, 'CD_DATA1.BIN'):
+                prepare(config)
+            next(o for o in broken['overlays'] if o['name'] == 'cd_data1_code')['size'] = 12288
+            next(o for o in broken['overlays'] if o['name'] == 'cd_data1_pins')['size'] = 16384
             config.write_text(json.dumps(broken))
             with self.assertRaisesRegex(ValueError, 'CD_DATA1.BIN'):
                 prepare(config)
