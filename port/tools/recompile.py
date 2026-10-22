@@ -31,13 +31,14 @@ def apply_runtime_patch(repo: Path) -> None:
     revision = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
     if revision != RUNTIME_REVISION:
         raise ValueError(f'expected RecompOne {RUNTIME_REVISION}, got {revision}')
-    patch = ROOT / 'port/patches/runtime-cd.patch'
     command = ['git', '-C', str(repo), 'apply']
-    if subprocess.run(command + ['--reverse', '--check', str(patch)],
-                      capture_output=True).returncode == 0:
-        return
-    subprocess.run(command + ['--check', str(patch)], check=True)
-    subprocess.run(command + [str(patch)], check=True)
+    for filename in ('runtime-cd.patch', 'runtime-bank-switch.patch'):
+        patch = ROOT / 'port/patches' / filename
+        if subprocess.run(command + ['--reverse', '--check', str(patch)],
+                          capture_output=True).returncode == 0:
+            continue
+        subprocess.run(command + ['--check', str(patch)], check=True)
+        subprocess.run(command + [str(patch)], check=True)
 
 
 def prepare(path: Path, banks: list[Bank]) -> None:
