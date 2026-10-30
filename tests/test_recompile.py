@@ -51,7 +51,8 @@ class RecompileTest(unittest.TestCase):
                 {'address': '0x80018F3C', 'name': 'VSync', 'size': 376},
                 {'address': '0x80010D48', 'name': 'func_80010D48', 'size': 856}]}))
             (root / 'funcmaps/bishi1.json').write_text(json.dumps({'functions': [
-                {'address': '0x80014CDC', 'name': 'func_80014CDC', 'size': 2048}]}))
+                {'address': '0x80014CDC', 'name': 'func_80014CDC', 'size': 2048},
+                {'address': '0x80035418', 'name': 'PutDrawEnv', 'size': 192}]}))
             (root / 'funcmaps/bishi2.json').write_text(json.dumps({'functions': [
                 {'address': '0x80012FC0', 'name': 'func_80012FC0', 'size': 2136}]}))
             config = root / 'BishiBashi.json'
@@ -102,13 +103,16 @@ class RecompileTest(unittest.TestCase):
                                           ('bishi2', '0x80012FC0', '0x80013750')]:
                 functions = json.loads((root / f'funcmaps/{name}.json').read_text())['functions']
                 self.assertEqual([(f['address'], f['size']) for f in functions],
-                                 [(start, 1848 if name == 'bishi1' else 1936), (callback, 200)])
+                                 [(start, 1848 if name == 'bishi1' else 1936), (callback, 200)] +
+                                 ([('0x80035418', 192)] if name == 'bishi1' else []))
             config_obj = json.loads(once)
             self.assertEqual(config_obj['patches'], [
                 {'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
                  'target': 'Recompiled.PadPatches.InitDirect'},
                 {'overlay': 'main', 'address': '0x80018F3C', 'mode': 'pre',
-                 'target': 'Recompiled.CdPatches.PumpWhenPolling'}])
+                 'target': 'Recompiled.CdPatches.PumpWhenPolling'},
+                {'overlay': 'bishi1', 'address': '0x80035418', 'mode': 'post',
+                 'target': 'Recompiled.GpuPatches.CacheDrawEnv'}])
             rows = [o for o in config_obj['overlays'] if o['name'].startswith(('super_bank_', 'hyper_bank_'))]
             self.assertEqual((len(rows), len({o['name'] for o in rows})), (96, 96))
             self.assertEqual({(o.get('linearSweep'), o.get('pointerScan'), o.get('funcMap'))

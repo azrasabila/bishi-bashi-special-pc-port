@@ -4,7 +4,29 @@ using RecompOne.Runtime.Context;
 using RecompOne.Runtime.Dispatch;
 using RecompOne.Runtime.Memory;
 
-if (args is ["fake"])
+if (args is ["draw-env"])
+{
+    var memory = new PSMemory();
+    const uint source = 0x80071000u, cache = 0x800605A8u;
+    for (uint i = 0; i < 0x5C; i++)
+    {
+        memory.WriteU8(source + i, (byte)(i + 1));
+        memory.WriteU8(cache + i, 0xFF);
+    }
+    memory.WriteU16(source + 4, 320);
+    memory.WriteU16(source + 6, 240);
+    memory.WriteU8(source + 0x18, 0); // No background fill; exercise the draw environment only.
+    memory.WriteU8(cache + 0x5C, 0xA5);
+    var context = new CpuContext { A0 = source };
+    Recompiled.BishiBashi_bishi1.PutDrawEnv_bishi1(context, memory);
+    for (uint i = 0; i < 0x5C; i++)
+        if (memory.ReadU8(cache + i) != memory.ReadU8(source + i))
+            throw new Exception($"BISHI1 PutDrawEnv did not cache byte {i:X2}");
+    if (memory.ReadU8(cache + 0x5C) != 0xA5 || context.V0 != source)
+        throw new Exception("BISHI1 PutDrawEnv changed the cache boundary or return value");
+    Console.WriteLine("BISHI1 draw environment cache passed");
+}
+else if (args is ["fake"])
 {
     var big = new Fake("big", 200, 0x800C0000u, 0x5000u, 0x800C4000u);
     var small = new Fake("small", 201, 0x800C0000u, 0x3000u, 0x800C0100u);
@@ -85,7 +107,7 @@ else if (args is [var auditPath])
 }
 else
 {
-    throw new ArgumentException("usage: BankSwitchCheck fake|.local/probe/bank-audit.json");
+    throw new ArgumentException("usage: BankSwitchCheck fake|draw-env|.local/probe/bank-audit.json");
 }
 
 sealed class Fake(string name, int lba, uint @base, uint size, uint entry) : IOverlay

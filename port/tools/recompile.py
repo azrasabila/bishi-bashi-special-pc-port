@@ -15,6 +15,8 @@ HOOK = {'overlay': 'main', 'address': '0x800243CC', 'mode': 'pre',
         'target': 'Recompiled.PadPatches.InitDirect'}
 CD_HOOK = {'overlay': 'main', 'address': '0x80018F3C', 'mode': 'pre',
            'target': 'Recompiled.CdPatches.PumpWhenPolling'}
+GPU_HOOK = {'overlay': 'bishi1', 'address': '0x80035418', 'mode': 'post',
+            'target': 'Recompiled.GpuPatches.CacheDrawEnv'}
 RUNTIME_REVISION = '4259b76fa923d1e607a6b3379ef908cb5d5b9354'
 # Exact pre-catalog descriptors, only to validate and migrate old ignored configs.
 LEGACY_BANKS = (
@@ -93,6 +95,9 @@ def prepare(path: Path, banks: list[Bank]) -> None:
         overlay_path = path.parent / entries[0]['funcMap']
         overlay = json.loads(overlay_path.read_text())
         mapped = overlay['functions']
+        if name == 'bishi1' and [(f['name'], f['size']) for f in mapped
+                                 if f['address'] == GPU_HOOK['address']] != [('PutDrawEnv', 192)]:
+            raise ValueError('unexpected bishi1 PutDrawEnv map at 0x80035418')
         original = [f for f in mapped if f['address'] == start]
         cb = [f for f in mapped if f['address'] == target]
         if (len(original) != 1 or original[0]['name'] != f'func_{start[2:]}' or
@@ -151,7 +156,7 @@ def prepare(path: Path, banks: list[Bank]) -> None:
     empty_map.write_text('{"functions": []}\n')
     matches[0]['name'] = 'PadInitDirect_Game'
     patches = config.setdefault('patches', [])
-    for hook in (HOOK, CD_HOOK):
+    for hook in (HOOK, CD_HOOK, GPU_HOOK):
         if hook not in patches:
             patches.append(hook)
     funcmap_path.write_text(json.dumps(funcmap, indent=2) + '\n')
